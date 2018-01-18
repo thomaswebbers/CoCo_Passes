@@ -14,6 +14,21 @@ namespace {
     };
 }
 
+bool isTriviallyLive (Instruction &I){
+    if(I.mayHaveSideEffects()){ //may have side effects
+        return true;
+    }else if(I.isTerminator()){ //is terminator
+        return true;
+    }else if(I.mayReadFromMemory()) //!is load AND !?volatile?
+        return true;
+    }else if (I.mayWriteFromMemory()) //!is write AND volatile
+        return true;
+    }else if (false){
+        return true;
+    }//! is call
+    return false;
+}
+
 bool ADCE::runOnFunction(Function &F) {
     LOG_LINE("Visiting function " << F.getName());
 
@@ -26,15 +41,27 @@ bool ADCE::runOnFunction(Function &F) {
         }
     }
 
+    df_iterator_default_set<BasicBlock*> Reachable;
+
     //!Initial pass to mark trivially live and dead instructions
     //LiveSet = emptySet;
+    SmallSet<Instruction, 16> liveSet;
     //for (each BB in F in depth-first order)
+    for (BasicBlock &BB : depth_first_ext(&F, Reachable)){
     //  for (each instruction in BB)
+        for (Instruction &II : BB) {
     //      if (isTriviallyLive(I))
+            if (isTriviallyLive(I)){
     //          markLive(I)
+                liveSet.insert(I);
     //      else if (I.use_empty())
+            }else if(I.use_empty()){
     //          remove I from BB
+                I.eraseFromParent();
+            }
     //
+        }
+    }
     //!Worklist to find new live instructions
     //while (WorkList is not empty)
     //  I = get instruction at head of working list;
