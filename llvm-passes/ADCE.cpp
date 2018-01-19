@@ -37,9 +37,9 @@ bool ADCE::runOnFunction(Function &F) {
     //LiveSet = emptySet;
     std::set<Instruction> liveSet; //! not using SmallSet, because not certain if can do .begin
     //for (each BB in F in depth-first order)
-    for (BasicBlock &BB : depth_first_ext(&F, Reachable)){
+    for (BasicBlock *BB : depth_first_ext(&F, Reachable)){
     //  for (each instruction in BB)
-        for (Instruction &I : BB) {
+        for (Instruction &I : *BB) {
     //      if (isTriviallyLive(I))
             if (isTriviallyLive(I)){
     //          markLive(I)
@@ -57,11 +57,12 @@ bool ADCE::runOnFunction(Function &F) {
     //while (WorkList is not empty)
     while(!liveSet.empty()){
     //  I = get instruction at head of working list;
-        Instruction I = liveSet.begin();
-        checkedSet.insert(I);
-        liveSet.erase(I);
+        std::set<Instruction>::iterator instructionIt = liveSet.begin();
+        const Instruction &I = *instructionIt;
+        checkedSet.insert(*instructionIt);
+        liveSet.erase(instructionIt);
     //  if (basic block containing I is reachable)
-        BasicBlock* instructionBlock = I.getParent();
+        const BasicBlock* instructionBlock = I.getParent();
         if (Reachable.count(instructionBlock)){
     //      for (all operands op of I)
             unsigned opCount = I.getNumOperands();
@@ -70,7 +71,8 @@ bool ADCE::runOnFunction(Function &F) {
     //          if (operand op is an instruction)
                 if (isa<Instruction>(op)){
     //              markLive(op)
-                    liveSet.insert(op);
+                    cast<Instruction>(op);//!
+                    liveSet.insert(*op);
                 }
             }
         }
@@ -80,7 +82,7 @@ bool ADCE::runOnFunction(Function &F) {
     //for (each BB in F in any order)
     for (BasicBlock &BB : F) {
     //  if (BB is reachable)
-        if (Reachable.count(*BB)){
+        if (Reachable.count(*BB)){ //!
     //      for (each non-live instruction I in BB)
             for (Instruction &I : BB) {
                 if(!checkedSet.count(I)){
@@ -93,7 +95,7 @@ bool ADCE::runOnFunction(Function &F) {
     //for (each BB in F in any order)
     for (BasicBlock &BB : F) {
     //  if (BB is reachable)
-        if (Reachable.count(*BB)){
+        if (Reachable.count(*BB)){ //!
     //      for (each non-live instruction I in BB)
             for (Instruction &I : BB) {
                 if(!checkedSet.count(I)){
