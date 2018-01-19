@@ -33,15 +33,24 @@ bool LICM::isLoopInvariant(Instruction &I){ //!
     return false;
 }
 
-bool LICM::isSafeToHoist(Instruction &I){//!
+bool LICM::isSafeToHoist(Instruction &I, Loop *L){//!
     //safe to hoist if it has no side effects...
     if (!I.mayHaveSideEffects()){
         return true;
     }
     //...or the basic block containing the instruction dominates all exit blocks for the loop
     //! use Loop::getExitBlocks()
-    for ()
-    return false;
+    SmallVector<BasicBlock* , 4> ExitBlocks;
+    L->getExitBlocks(ExitBlocks);
+    bool result = true;
+    DominatorTree *DT = &getAnalysis<DominatorTreeWrapperPass>().getDomTree();
+    BasicBlock* Parent = I.getParent();
+    for(int i = 0; i < ExitBlocks.size(); i++){
+        if(!DT->dominates(Parent, ExitBlocks[i])){
+            result = false;
+        }
+    }
+    return result;
 }
 
 bool LICM::runOnLoop(Loop *L, LPPassManager &LPM) {
@@ -59,7 +68,7 @@ bool LICM::runOnLoop(Loop *L, LPPassManager &LPM) {
                 //move every instruction in BB...
                 for (Instruction &I : *BB){
                     //...that is a "loop invariant", and is "safe to hoist"
-                    if (isLoopInvariant(I) && isSafeToHoist(I)){
+                    if (isLoopInvariant(I) && isSafeToHoist(I, L)){
                         //...to the preheader of the loop.
                         //!move to preheader, cannot create new Instruction?
                         //remove from original location
