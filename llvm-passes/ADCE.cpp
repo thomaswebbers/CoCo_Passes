@@ -19,9 +19,9 @@ bool isTriviallyLive (Instruction &I){
         return true;
     }else if(I.isTerminator()){ //is terminator
         return true;
-    }else if(dyn_cast<LoadInst>(I).isVolatile()) //is load AND !?volatile?
+    }else if(dyn_cast<LoadInst>(I).isVolatile()){ //is load AND !?volatile?
         return true;
-    }else if (isa<StoreInst>(I)) //is write
+    }else if (isa<StoreInst>(I)){ //is write
         return true;
     }else if (isa<CallInst>(I)){ // Is call
         return true;
@@ -35,11 +35,11 @@ bool ADCE::runOnFunction(Function &F) {
 
     //!Initial pass to mark trivially live and dead instructions
     //LiveSet = emptySet;
-    SmallSet<Instruction, 16> liveSet;
+    std::set<Instruction> liveSet; //! not using SmallSet, because not certain if can do .begin
     //for (each BB in F in depth-first order)
     for (BasicBlock &BB : depth_first_ext(&F, Reachable)){
     //  for (each instruction in BB)
-        for (Instruction &II : BB) {
+        for (Instruction &I : BB) {
     //      if (isTriviallyLive(I))
             if (isTriviallyLive(I)){
     //          markLive(I)
@@ -49,27 +49,60 @@ bool ADCE::runOnFunction(Function &F) {
     //          remove I from BB
                 I.eraseFromParent();
             }
-    //
         }
     }
+    //
     //!Worklist to find new live instructions
+    std::set<Instruction> checkedSet; //! using set of instructions, but giving reference instead of objects
     //while (WorkList is not empty)
+    while(!liveSet.empty()){
     //  I = get instruction at head of working list;
+        Instruction I = liveSet.begin();
+        checkedSet.insert(I);
+        liveSet.erase(I);
     //  if (basic block containing I is reachable)
+        BasicBlock* instructionBlock = I.getParent();
+        if (Reachable.count(instructionBlock)){
     //      for (all operands op of I)
+            unsigned opCount = I.getNumOperands();
+            for (unsigned i = 0; i < opCount; ++i){
+                Value* op = I.getOperand(i);
     //          if (operand op is an instruction)
+                if (isa<Instruction>(op)){
     //              markLive(op)
+                    liveSet.insert(op);
+                }
+            }
+        }
+    }
     //
     //!Delete instructions not in LiveSet
     //for (each BB in F in any order)
+    for (BasicBlock &BB : F) {
     //  if (BB is reachable)
+        if (Reachable.count(*BB)){
     //      for (each non-live instruction I in BB)
-    //          I.dropAllReferences();
+            for (Instruction &I : BB) {
+                if(!checkedSet.count(I)){
+    //              I.dropAllReferences();
+                    I.dropAllReferences();
+                }
+            }
+        }
+    }
     //for (each BB in F in any order)
+    for (BasicBlock &BB : F) {
     //  if (BB is reachable)
+        if (Reachable.count(*BB)){
     //      for (each non-live instruction I in BB)
+            for (Instruction &I : BB) {
+                if(!checkedSet.count(I)){
     //          erase I from BB;
-
+                I.eraseFromParent();
+                }
+            }
+        }
+    }
 
     return true;  // We did alter the IR
 }
