@@ -19,27 +19,17 @@ bool isTriviallyLive (Instruction &I){
         return true;
     }else if(I.isTerminator()){ //is terminator
         return true;
-    }else if(I.mayReadFromMemory()) //!is load AND !?volatile?
+    }else if(dyn_cast<LoadInst>(I).isVolatile()) //is load AND !?volatile?
         return true;
-    }else if (I.mayWriteFromMemory()) //!is write AND volatile
+    }else if (isa<StoreInst>(I)) //is write
         return true;
-    }else if (false){
+    }else if (isa<CallInst>(I)){ // Is call
         return true;
-    }//! is call
+    }
     return false;
 }
 
 bool ADCE::runOnFunction(Function &F) {
-    LOG_LINE("Visiting function " << F.getName());
-
-    for (BasicBlock &BB : F) {
-        for (Instruction &II : BB) {
-            Instruction *I = &II;
-            if (CallInst *CI = dyn_cast<CallInst>(I)) {
-                LOG_LINE(" Found call: " << *CI);
-            }
-        }
-    }
 
     df_iterator_default_set<BasicBlock*> Reachable;
 
