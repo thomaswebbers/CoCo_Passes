@@ -14,7 +14,7 @@ namespace {
     };
 }
 
-bool isTriviallyLive (Instruction &I){
+bool isTriviallyLive (Instruction *I){
     if(I.mayHaveSideEffects()){ //may have side effects
         return true;
     }else if(I.isTerminator()){ //is terminator
@@ -40,6 +40,7 @@ bool ADCE::runOnFunction(Function &F) {
     for (BasicBlock *BB : depth_first_ext(&F, Reachable)){
     //  for (each instruction in BB)
         for (Instruction &I : *BB) {
+            Instruction *I = &I;
     //      if (isTriviallyLive(I))
             if (isTriviallyLive(I)){
     //          markLive(I)
