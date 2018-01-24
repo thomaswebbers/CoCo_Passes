@@ -21,10 +21,50 @@ bool CONSTPR::runOnFunction(Function &F) {
     std::set<Instruction*> WorkList;
     for (Instruction &I: instructions(&F))
         WorkList.insert(&I);
+
+    //set boolean for checking if constants were propageted if no exit
     bool changed = false;
+
+    //work through worklist
     while(!WorkList.empty()){
+
+    //  fetches first instruction from worklist  
         Instruction *I = *WorkList.begin();
         WorkList.erase(WorkList.begin());    // Get an element from the worklist...
+
+        //prevents using dead instructions
+        if(!I->use_empty()){
+            for (Instruction &II : *BB) {
+    //          check if instruction is binary operator
+                if(!(isa<binaryOperator>(I))){
+                    continue;
+                }
+
+               Value* op1 = I->getOperand(0);
+               Value* op2 = I->getOperand(1);
+
+                if(!(ConstantInt* constantInteger = dyn_cast<ConstantInt>(v)){
+                    continue;
+                }
+
+
+
+    //          for(each OP in I)
+                Value *operandLHS;
+                Value *operandRHS;
+                auto computationOperator;
+                for(Use &U : &II->operands()){
+                    Value *v = U.get();
+    //              for(each CONST in OP)  //checks if OP is CONST by casting to ConstantInt
+                    if(!(ConstantInt* constantInteger = dyn_cast<ConstantInt>(v)){
+                        break;
+                    }
+                    operandLHS = U.get();
+                }
+                ConstantInt *cInt = dyn_cast<ConstantInt>(v);
+                ConstantInt *resultOfComputation = foldConstant(cInt); 
+            }    
+        }
     }
 
 
