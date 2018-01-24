@@ -40,6 +40,15 @@ bool CONSTPR::runOnFunction(Function &F) {
     //      for(each I in BB)
             for (Instruction &II : *BB) {
     //          for(each OP in I)
+                for(Use &U : &II->operands()){
+                    Value *v = U.get();
+    //              for(each CONST in OP)  //checks if OP is CONST by casting to ConstantInt
+                    if(auto* ConstantInt = dyn_cast<ConstantInt>(*v)){
+    //                  
+                    }
+                }
+    //          for(each OP in I)
+                I.getOperandList()           //Inherited user so should have this call
                 
     //              for(each CONST in OP) // TODO: Check whether an operand is a constant by casting it to a ConstantInt.
     //                  add CONST to constantSet
