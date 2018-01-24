@@ -16,6 +16,34 @@ namespace {
     };
 }
 
+ConstantInt* foldConstant(BinaryOperator* I){
+    uint64_t result;
+
+    Type* Ty = I->getType();
+    ConstantInt* lop = dyn_cast<ConstantInt>(I->getOperand(0));
+    ConstantInt* rop = dyn_cast<ConstantInt>(I->getOperand(1));
+    unsigned Opcode = I->getOpcode();
+
+    uint64_t lval = lop->getZExtValue();
+    uint64_t rval = rop->getZExtValue();
+
+    if (Opcode == Instruction::Add){
+        result = lval + rval;
+    }else if (Opcode == Instruction::Sub){
+        result = lval - rval;
+    }else if (Opcode == Instruction::Mul){
+        result = lval * rval;
+    }/*else if (Opcode == Instruction::Ashr){
+        result = lval << rval; //! not certain about this
+    }else if (Opcode == Instruction::Shl){
+        result = lval >> rval; //! >> ? <<
+    }*/
+    if(result){
+        LOG_LINE(result);
+        return cast<ConstantInt>(ConstantInt::get(Ty, result));
+    }
+    return nullptr;
+}
 bool CONSTPR::runOnFunction(Function &F) {
     // Create a worklist of instructions
     std::set<Instruction*> WorkList;
@@ -28,7 +56,7 @@ bool CONSTPR::runOnFunction(Function &F) {
     //work through worklist
     while(!WorkList.empty()){
 
-    //  fetches first instruction from worklist  
+    //  fetches first instruction from worklist
         Instruction *I = *WorkList.begin();
         WorkList.erase(WorkList.begin());    // Get an element from the worklist...
 
@@ -62,8 +90,8 @@ bool CONSTPR::runOnFunction(Function &F) {
                     operandLHS = U.get();
                 }
                 ConstantInt *cInt = dyn_cast<ConstantInt>(v);
-                ConstantInt *resultOfComputation = foldConstant(cInt); 
-            }    
+                ConstantInt *resultOfComputation = foldConstant(cInt);
+            }
         }
     }
 
@@ -81,12 +109,12 @@ bool CONSTPR::runOnFunction(Function &F) {
                 LOG_LINE(" Found call: " << *CI);
     */
 
-   
+
     //bool changed
-    
+
     //while(changed)                          // has users (keep looping till nothing is changed)
     while(changed){
-    //  changed == false;            
+    //  changed == false;
     //  for (each BB in F)
         for (BasicBlock &BB : F) {
     //      for(each I in BB)
@@ -103,7 +131,7 @@ bool CONSTPR::runOnFunction(Function &F) {
                 }
     //          for(each OP in I)
                 I.getOperandList()           //Inherited user so should have this call
-                
+
     //              for(each CONST in OP) // TODO: Check whether an operand is a constant by casting it to a ConstantInt.
     //                  add CONST to constantSet
     //  end loops
@@ -113,12 +141,12 @@ bool CONSTPR::runOnFunction(Function &F) {
     //  for (each CONST in ConstantSet)
     //      calculate value of constant in order it was added
     //      For every type of computation: lhs.getZExtValue() op rhs.getZEXxtValue()
-    //      addition, 
-    //      subtraction, 
-    //      multiplica- tion, 
+    //      addition,
+    //      subtraction,
+    //      multiplica- tion,
     //      arithmetic shift
-    //      changed == true      
-    //      Insert in map 
+    //      changed == true
+    //      Insert in map
     //
     //  go through code and replace if find variable as key in map replace with value
     //
@@ -128,7 +156,7 @@ bool CONSTPR::runOnFunction(Function &F) {
 
     //bool changed
     //while(changed)                          // has users (keep looping till nothing is changed)
-    //  changed == false;            
+    //  changed == false;
     //  for (each BB in F)
     //      for(each I in BB)
     //          for(each OP in I)
@@ -136,29 +164,29 @@ bool CONSTPR::runOnFunction(Function &F) {
     //                  add CONST to constantSet
     //  end loops
 
-        
+
     //  for (each CONST in ConstantSet)
     //      calculate value of constant in order it was added
     //      For every type of computation: lhs.getZExtValue() op rhs.getZEXxtValue()
-    //      addition, 
-    //      subtraction, 
-    //      multiplica- tion, 
+    //      addition,
+    //      subtraction,
+    //      multiplica- tion,
     //      arithmetic shift
-    //      changed == true      
-    //      Insert in map 
+    //      changed == true
+    //      Insert in map
     //
     //  go through code and replace if find variable as key in map replace with value
     //
 
-/*             
+/*
         //for (each BB in F)
         for (BasicBlock &BB : F) {
-        //  for(each I in BB)  
+        //  for(each I in BB)
             for (Instruction &II : BB) {
                 Instruction *I = &II;
-        //      for(each OP in I)        
+        //      for(each OP in I)
                 if (CallInst *CI = dyn_cast<ConstantInt>(I)) {
-        //TODO add to set          
+        //TODO add to set
 
                 }
             }
@@ -166,19 +194,16 @@ bool CONSTPR::runOnFunction(Function &F) {
 */
     //for (each CONST in ConstantSet)
     //  calculate value of constant in order it was added
-    //  insert in map 
+    //  insert in map
     //
 
     //go through code and replace if find variable as key in map replace with value
 
-    return false;  // We did not alter the IR
+    return true;  // We did alter the IR
 }
 
-// Register the pass with LLVM so we can invoke it with opt. The first argument
-// to RegisterPass is the commandline switch to run this pass (e.g., opt
-// -coco-dummypass, the second argument is a description shown in the help text
-// about this pass.
+
 char CONSTPR::ID = 0;
-static RegisterPass<CONSTPR> X("coco-dummypass", "Example LLVM pass printing each function it visits, and every call instruction it finds");
+static RegisterPass<CONSTPR> X("coco-constprop", "Propagate constants over the code");
 
 
