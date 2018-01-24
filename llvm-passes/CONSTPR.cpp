@@ -17,6 +17,18 @@ namespace {
 }
 
 bool CONSTPR::runOnFunction(Function &F) {
+    // Create a worklist of instructions
+    std::set<Instruction*> WorkList;
+    for (Instruction &I: instructions(&F))
+        WorkList.insert(&I);
+    bool changed = false;
+    while(!WorkList.empty()){
+        Instruction *I = *WorkList.begin();
+        WorkList.erase(WorkList.begin());    // Get an element from the worklist...
+    }
+
+
+
 
      std::set<Constant> constantSet; //! not using SmallSet, because not certain if can do .begin
     //TODO Map of values(computated numbers) and keys(variable names)
@@ -31,7 +43,7 @@ bool CONSTPR::runOnFunction(Function &F) {
 
    
     //bool changed
-    bool changed = false;
+    
     //while(changed)                          // has users (keep looping till nothing is changed)
     while(changed){
     //  changed == false;            
@@ -43,9 +55,11 @@ bool CONSTPR::runOnFunction(Function &F) {
                 for(Use &U : &II->operands()){
                     Value *v = U.get();
     //              for(each CONST in OP)  //checks if OP is CONST by casting to ConstantInt
-                    if(auto* ConstantInt = dyn_cast<ConstantInt>(*v)){
-    //                  
+                    if(!(ConstantInt* constantInteger = dyn_cast<ConstantInt>(v)){
+                        break;
                     }
+                    ConstantInt cInt = dyn_cast<ConstantInt>(v);
+
                 }
     //          for(each OP in I)
                 I.getOperandList()           //Inherited user so should have this call
