@@ -24,28 +24,38 @@ void LICM::getAnalysisUsage(AnalysisUsage &AU) const {
     getLoopAnalysisUsage(AU);
 }
 
-bool LICM::isLoopInvariant(Instruction &I){ //!
+bool isLoopInvariant(Instruction &I, Loop *L){
     //is binary operator, shift, select, cast or getelementptr...
     if(isa<BinaryOperator>(I) ||I.isShift() || isa<SelectInst>(I) || isa<CastInst>(I) || isa<GetElementPtrInst>(I)){
         //...and all operand of the instruction are either a constant or computed outside the loop
-        //! same issue as ADCE, first part easy with isa<Constant>(op)
+        unsigned opCount = I.getNumOperands();
+        for (unsigned i = 0; i < opCount; ++i){
+            Value* op = I.getOperand(i);
+            if(isa<Constant>(op)){
+                continue;
+            }
+            Instruction* opIn = dyn_cast<Instruction>(op);
+            if(opIn && !L->contains(opIn)){
+                continue;
+            }
+            return false;
+        }
+        return true;
     }
     return false;
 }
 
-bool LICM::isSafeToHoist(Instruction &I, Loop *L){//!
+bool isSafeToHoist(Instruction &I, Loop *L, DominatorTree* DT){
     //safe to hoist if it has no side effects...
     if (!I.mayHaveSideEffects()){
         return true;
     }
     //...or the basic block containing the instruction dominates all exit blocks for the loop
-    //! use Loop::getExitBlocks()
     SmallVector<BasicBlock* , 4> ExitBlocks;
     L->getExitBlocks(ExitBlocks);
     bool result = true;
-    DominatorTree *DT = &getAnalysis<DominatorTreeWrapperPass>().getDomTree();
     BasicBlock* Parent = I.getParent();
-    for(int i = 0; i < ExitBlocks.size(); i++){
+    for(unsigned int i = 0; i < ExitBlocks.size(); i++){
         if(!DT->dominates(Parent, ExitBlocks[i])){
             result = false;
         }
@@ -54,28 +64,36 @@ bool LICM::isSafeToHoist(Instruction &I, Loop *L){//!
 }
 
 bool LICM::runOnLoop(Loop *L, LPPassManager &LPM) {
+    std::set<Instruction*> moveSet;
     //get current loop header
     BasicBlock *Header = L->getHeader();
-    //!get the current loop preheader (for later)
+    //get the current loop preheader terminator (for later)
+    BasicBlock *PreHeader = L->getLoopPreheader();
+    Instruction *preTerm = PreHeader->getTerminator();
 
     //get every basic block dominated by the current loop header
     DominatorTree *DT = &getAnalysis<DominatorTreeWrapperPass>().getDomTree();
+    LoopInfoWrapperPass *loopInfo = &getAnalysis<LoopInfoWrapperPass>();
     for (BasicBlock *BB : L->blocks()) {
         if (DT->dominates(Header, BB)) {
             //Check if a basic block is not in a sub-loop
-            //!use LoopInfoWrapperPass
-            if (false){ //!
+            Loop* innerLoop = loopInfo->getLoopInfo().getLoopFor(BB);
+            if (innerLoop == L){
                 //move every instruction in BB...
                 for (Instruction &I : *BB){
                     //...that is a "loop invariant", and is "safe to hoist"
-                    if (isLoopInvariant(I) && isSafeToHoist(I, L)){
+                    if (isLoopInvariant(I, L) && isSafeToHoist(I, L, DT)){
                         //...to the preheader of the loop.
-                        //!move to preheader, cannot create new Instruction?
-                        //remove from original location
+                        moveSet.insert(&I);
                     }
                 }
             }
         }
+    }
+    std::set<Instruction*>::iterator it;
+    for (it = moveSet.begin(); it != moveSet.end(); ++it){
+        Instruction* pI = *it;
+        pI->moveBefore(preTerm);
     }
 
     return true; //we did modify the IR
