@@ -33,7 +33,11 @@ ConstantInt* foldConstant(BinaryOperator* I){
         result = lval - rval;
     }else if (Opcode == Instruction::Mul){
         result = lval * rval;
-    }/*else if (Opcode == Instruction::Ashr){
+    }else if(isShift(Opcode)->isArithmeticShift()){
+        result = lval << rval;
+    }
+
+    /*else if (Opcode == Instruction::Ashr){
         result = lval << rval; //! not certain about this
     }else if (Opcode == Instruction::Shl){
         result = lval >> rval; //! >> ? <<
@@ -44,6 +48,43 @@ ConstantInt* foldConstant(BinaryOperator* I){
     }
     return nullptr;
 }
+
+ConstantInt* foldConstant(BinaryOperator* I){
+    uint64_t result;
+
+    Type* Ty = I->getType();
+    ConstantInt* lop = dyn_cast<ConstantInt>(I->getOperand(0));
+    ConstantInt* rop = dyn_cast<ConstantInt>(I->getOperand(1));
+    unsigned Opcode = I->getOpcode();
+
+    uint64_t lval = lop->getZExtValue();
+    uint64_t rval = rop->getZExtValue();
+
+    if (Opcode == Instruction::Add){
+        result = lval + rval;
+    }else if (Opcode == Instruction::Sub){
+        result = lval - rval;
+    }else if (Opcode == Instruction::Mul){
+        result = lval * rval;
+    }else if(Opcode == Instruction::AShr){
+        result = lval << rval;
+    }
+
+
+    /*else if (Opcode == Instruction::Ashr){
+        result = lval << rval; //! not certain about this
+    }else if (Opcode == Instruction::Shl){
+        result = lval >> rval; //! >> ? <<
+    }*/
+    if(result){
+        LOG_LINE(result);
+        return cast<ConstantInt>(ConstantInt::get(Ty, result));
+    }
+    return nullptr;
+}
+
+
+
 bool CONSTPR::runOnFunction(Function &F) {
     // Create a worklist of instructions
     std::set<Instruction*> WorkList;
@@ -62,39 +103,40 @@ bool CONSTPR::runOnFunction(Function &F) {
 
         //prevents using dead instructions
         if(!I->use_empty()){
+            ConstantInt *resultOfComputation;
             for (Instruction &II : *BB) {
     //          check if instruction is binary operator
                 if(!(isa<binaryOperator>(I))){
                     continue;
                 }
-
+    //         for(each OP in I)
                Value* op1 = I->getOperand(0);
                Value* op2 = I->getOperand(1);
 
-                if(!(ConstantInt* constantInteger = dyn_cast<ConstantInt>(v)){
+                //TODO add possible non double constant edge cases
+               if(!(ConstantInt* constantInteger = dyn_cast<ConstantInt>(op1)) || !(ConstantInt* constantInteger = dyn_cast<ConstantInt>(op2))){
+                    //skip this instruction and take the next since the values are not both constants
                     continue;
                 }
 
-
-
-    //          for(each OP in I)
-                Value *operandLHS;
-                Value *operandRHS;
-                auto computationOperator;
-                for(Use &U : &II->operands()){
-                    Value *v = U.get();
-    //              for(each CONST in OP)  //checks if OP is CONST by casting to ConstantInt
-                    if(!(ConstantInt* constantInteger = dyn_cast<ConstantInt>(v)){
-                        break;
-                    }
-                    operandLHS = U.get();
-                }
-                ConstantInt *cInt = dyn_cast<ConstantInt>(v);
-                ConstantInt *resultOfComputation = foldConstant(cInt);
+                resultOfComputation = foldConstant(cInt);
             }
-        }
-    }
 
+            //adds all users of the I to the workList
+            for (User *U : I->users()){
+               WorkList.insert(cast<Instruction>(U));
+            } 
+
+    //      Replace all of the uses of a variable with uses of the constant.
+            I->replaceAllUsesWith(resultOfComputation);
+        }
+
+    //  Constant was propegated
+        Changed = true;
+    }
+    return changed;
+}
+/*
 
 
 
@@ -107,7 +149,7 @@ bool CONSTPR::runOnFunction(Function &F) {
             Instruction *I = &II;
             if (CallInst *CI = dyn_cast<CallInst>(I)) {
                 LOG_LINE(" Found call: " << *CI);
-    */
+    
 
 
     //bool changed
@@ -191,7 +233,7 @@ bool CONSTPR::runOnFunction(Function &F) {
                 }
             }
         }
-*/
+
     //for (each CONST in ConstantSet)
     //  calculate value of constant in order it was added
     //  insert in map
@@ -201,7 +243,7 @@ bool CONSTPR::runOnFunction(Function &F) {
 
     return true;  // We did alter the IR
 }
-
+*/
 
 char CONSTPR::ID = 0;
 static RegisterPass<CONSTPR> X("coco-constprop", "Propagate constants over the code");
