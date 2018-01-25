@@ -18,6 +18,7 @@ namespace {
 
 
 ConstantInt* foldConstant(BinaryOperator* I){
+    //! handle signed/unsigned ints.
     uint64_t result;
 
     Type* Ty = I->getType();
@@ -35,17 +36,14 @@ ConstantInt* foldConstant(BinaryOperator* I){
     }else if (Opcode == Instruction::Mul){
         result = lval * rval;
     }else if(Opcode == Instruction::AShr){
+        result = lval >> rval;
+    }else if(Opcode == Instruction::Shl){
         result = lval << rval;
     }
 
-
-    /*else if (Opcode == Instruction::Ashr){
-        result = lval << rval; //! not certain about this
-    }else if (Opcode == Instruction::Shl){
-        result = lval >> rval; //! >> ? <<
-    }*/
     if(result){
-        LOG_LINE(result);
+        long print = result;
+        LOG_LINE(print);
         return cast<ConstantInt>(ConstantInt::get(Ty, result));
     }
     return nullptr;
@@ -72,9 +70,9 @@ bool CONSTPR::runOnFunction(Function &F) {
         //prevents using dead instructions
         if(!I->use_empty()){
             ConstantInt *resultOfComputation;
-            for (Instruction &II : *BB) {
+            ///for (Instruction &II : *BB) {
     //          check if instruction is binary operator
-                if(!(isa<binaryOperator>(I))){
+                if(!(isa<BinaryOperator>(I))){
                     continue;
                 }
     //         for(each OP in I)
@@ -82,25 +80,27 @@ bool CONSTPR::runOnFunction(Function &F) {
                Value* op2 = I->getOperand(1);
 
                 //TODO add possible non double constant edge cases
-               if(!(ConstantInt* constantInteger = dyn_cast<ConstantInt>(op1)) || !(ConstantInt* constantInteger = dyn_cast<ConstantInt>(op2))){
+               if(!isa<ConstantInt>(op1) || !isa<ConstantInt>(op2)){
                     //skip this instruction and take the next since the values are not both constants
+                    //!add edge case handling here
                     continue;
                 }
 
-                resultOfComputation = foldConstant(cInt);
-            }
+                BinaryOperator* bI = cast<BinaryOperator>(I);
+                resultOfComputation = foldConstant(bI);
+            //}
 
             //adds all users of the I to the workList
             for (User *U : I->users()){
                WorkList.insert(cast<Instruction>(U));
-            } 
+            }
 
     //      Replace all of the uses of a variable with uses of the constant.
             I->replaceAllUsesWith(resultOfComputation);
         }
 
     //  Constant was propegated
-        Changed = true;
+        changed = true;
     }
     return changed;
 }
@@ -117,7 +117,7 @@ bool CONSTPR::runOnFunction(Function &F) {
             Instruction *I = &II;
             if (CallInst *CI = dyn_cast<CallInst>(I)) {
                 LOG_LINE(" Found call: " << *CI);
-    
+
 
 
     //bool changed
