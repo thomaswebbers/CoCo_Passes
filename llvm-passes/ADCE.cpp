@@ -50,6 +50,7 @@ bool ADCE::runOnFunction(Function &F) {
     //  for (each instruction in BB)
         for (Instruction &I : *BB) {
     //      if (isTriviallyLive(I))
+            LOG_LINE("islive" << isTriviallyLive(I) << " code: " << I);
             if (isTriviallyLive(I)){
     //          markLive(I)
                 liveSet.insert(&I);
@@ -62,7 +63,7 @@ bool ADCE::runOnFunction(Function &F) {
     }
     //
     //!Worklist to find new live instructions
-    std::set<Instruction*> checkedSet; //! using set of instructions, but giving reference instead of objects
+    std::set<Instruction*> checkedSet;
     //while (WorkList is not empty)
     while(!liveSet.empty()){
     //  I = get instruction at head of working list;

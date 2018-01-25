@@ -19,6 +19,7 @@ namespace {
 
 ConstantInt* foldConstant(BinaryOperator* I){
     int64_t result;
+    bool resultSet = false;
 
     Type* Ty = I->getType();
     ConstantInt* lop = dyn_cast<ConstantInt>(I->getOperand(0));
@@ -30,19 +31,22 @@ ConstantInt* foldConstant(BinaryOperator* I){
 
     if (Opcode == Instruction::Add){
         result = lval + rval;
+        resultSet = true;
     }else if (Opcode == Instruction::Sub){
         result = lval - rval;
+        resultSet = true;
     }else if (Opcode == Instruction::Mul){
         result = lval * rval;
+        resultSet = true;
     }else if(Opcode == Instruction::AShr){
         result = lval >> rval;
+        resultSet = true;
     }else if(Opcode == Instruction::Shl){
         result = lval << rval;
+        resultSet = true;
     }
 
-    if(result){
-        long print = result;
-        LOG_LINE(print);
+    if(resultSet){
         return cast<ConstantInt>(ConstantInt::get(Ty, result));
     }
     return nullptr;
@@ -108,8 +112,9 @@ Value* checkEdgeCases(BinaryOperator* I){
 bool CONSTPR::runOnFunction(Function &F) {
     // Create a worklist of instructions
     std::set<Instruction*> WorkList;
-    for (Instruction &I: instructions(&F))
+    for (Instruction &I: instructions(&F)){
         WorkList.insert(&I);
+    }
 
     //set boolean for checking if constants were propageted if no exit
     bool changed = false;
@@ -122,39 +127,38 @@ bool CONSTPR::runOnFunction(Function &F) {
         WorkList.erase(WorkList.begin());    // Get an element from the worklist...
 
         //prevents using dead instructions
-        if(!I->use_empty()){
-            Value* resultOfComputation;
-    //          check if instruction is binary operator
-            if(!(isa<BinaryOperator>(I))){
-                    continue;
-            }
-            BinaryOperator* bI = cast<BinaryOperator>(I);
-
-    //      for(each OP in I)
-            Value* op1 = I->getOperand(0);
-            Value* op2 = I->getOperand(1);
-
-            if(!isa<ConstantInt>(op1) || !isa<ConstantInt>(op2)){
-                //skip this instruction and take the next since the values are not both constants
-                if(!isa<ConstantInt>(op1) && !isa<ConstantInt>(op2)){
-                    continue;
-                }
-                resultOfComputation = checkEdgeCases(bI);
-                if(resultOfComputation == nullptr){
-                    continue;
-                }
-            }else{
-                resultOfComputation = foldConstant(bI);
-            }
-
-            //adds all users of the I to the workList
-            for (User *U : I->users()){
-               WorkList.insert(cast<Instruction>(U));
-            }
-
-    //      Replace all of the uses of a variable with uses of the constant.
-            I->replaceAllUsesWith(resultOfComputation);
+        Value* resultOfComputation;
+//          check if instruction is binary operator
+        if(!(isa<BinaryOperator>(I))){
+            continue;
         }
+
+        BinaryOperator* bI = cast<BinaryOperator>(I);
+
+//      for(each OP in I)
+        Value* op1 = I->getOperand(0);
+        Value* op2 = I->getOperand(1);
+
+        if(!isa<ConstantInt>(op1) || !isa<ConstantInt>(op2)){
+            //skip this instruction and take the next since the values are not both constants
+            if(!isa<ConstantInt>(op1) && !isa<ConstantInt>(op2)){
+                continue;
+            }
+            resultOfComputation = checkEdgeCases(bI);
+            if(resultOfComputation == nullptr){
+                continue;
+            }
+        }else{
+            resultOfComputation = foldConstant(bI);
+        }
+
+        //adds all users of the I to the workList
+        for (User *U : I->users()){
+           WorkList.insert(cast<Instruction>(U));
+        }
+
+//      Replace all of the uses of a variable with uses of the constant.
+        I->replaceAllUsesWith(resultOfComputation);
 
     //  Constant was propegated
         changed = true;
