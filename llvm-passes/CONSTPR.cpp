@@ -48,6 +48,61 @@ ConstantInt* foldConstant(BinaryOperator* I){
     return nullptr;
 }
 
+Value* checkEdgeCases(BinaryOperator* I){
+    ConstantInt* lop = dyn_cast<ConstantInt>(I->getOperand(0));
+    ConstantInt* rop = dyn_cast<ConstantInt>(I->getOperand(1));
+    unsigned Opcode = I->getOpcode();
+
+    if (Opcode == Instruction::Add){
+        if(lop != nullptr && lop->isZero()){
+            return I->getOperand(1);            // 0 + x = x
+        }
+        if(rop != nullptr && rop->isZero()){
+            return I->getOperand(0);            // x + 0 = x
+        }
+
+    }else if (Opcode == Instruction::Sub){
+        if(rop != nullptr && rop->isZero()){
+            return I->getOperand(0);            // x - 0 = x
+        }
+
+    }else if (Opcode == Instruction::Mul){
+        if(lop != nullptr){
+            if(lop->isZero()){
+                return I->getOperand(0);               // 0 * x = 0
+            }
+            if(lop->isOne()){
+                return I->getOperand(1);               // 1 * x = x
+            }
+        }
+        else if(rop != nullptr){
+            if(rop->isZero()){
+                return I->getOperand(1);               // x * 0 = 0
+            }
+            if(rop->isOne()){
+                return I->getOperand(0);               // x * 1 = x
+            }
+        }
+
+    }else if(Opcode == Instruction::AShr){
+        if(lop != nullptr && lop->isZero()){
+            return I->getOperand(0);                   // 0 >> x = 0
+        }
+        if (rop != nullptr && rop->isZero()){
+            return I->getOperand(0);                   // x >> 0 = x
+        }
+
+    }else if(Opcode == Instruction::Shl){
+        if(lop != nullptr && lop->isZero()){
+            return I->getOperand(0);                   // 0 << x = 0
+        }
+        if (rop != nullptr && rop->isZero()){
+            return I->getOperand(0);                   // x << 0 = x
+        }
+    }
+    return nullptr;
+}
+
 
 
 bool CONSTPR::runOnFunction(Function &F) {
@@ -68,26 +123,29 @@ bool CONSTPR::runOnFunction(Function &F) {
 
         //prevents using dead instructions
         if(!I->use_empty()){
-            ConstantInt *resultOfComputation;
-            ///for (Instruction &II : *BB) {
+            Value* resultOfComputation;
     //          check if instruction is binary operator
-                if(!(isa<BinaryOperator>(I))){
+            if(!(isa<BinaryOperator>(I))){
+                    continue;
+            }
+            BinaryOperator* bI = cast<BinaryOperator>(I);
+
+    //      for(each OP in I)
+            Value* op1 = I->getOperand(0);
+            Value* op2 = I->getOperand(1);
+
+            if(!isa<ConstantInt>(op1) || !isa<ConstantInt>(op2)){
+                //skip this instruction and take the next since the values are not both constants
+                if(!isa<ConstantInt>(op1) && !isa<ConstantInt>(op2)){
                     continue;
                 }
-    //         for(each OP in I)
-               Value* op1 = I->getOperand(0);
-               Value* op2 = I->getOperand(1);
-
-                //TODO add possible non double constant edge cases
-               if(!isa<ConstantInt>(op1) || !isa<ConstantInt>(op2)){
-                    //skip this instruction and take the next since the values are not both constants
-                    //!add edge case handling here
+                resultOfComputation = checkEdgeCases(bI);
+                if(resultOfComputation == nullptr){
                     continue;
                 }
-
-                BinaryOperator* bI = cast<BinaryOperator>(I);
+            }else{
                 resultOfComputation = foldConstant(bI);
-            //}
+            }
 
             //adds all users of the I to the workList
             for (User *U : I->users()){
@@ -103,114 +161,6 @@ bool CONSTPR::runOnFunction(Function &F) {
     }
     return changed;
 }
-/*
-
-
-
-     std::set<Constant> constantSet; //! not using SmallSet, because not certain if can do .begin
-    //TODO Map of values(computated numbers) and keys(variable names)
-
-     /*
-    for (BasicBlock &BB : F) {
-        for (Instruction &II : *BB) {
-            Instruction *I = &II;
-            if (CallInst *CI = dyn_cast<CallInst>(I)) {
-                LOG_LINE(" Found call: " << *CI);
-
-
-
-    //bool changed
-
-    //while(changed)                          // has users (keep looping till nothing is changed)
-    while(changed){
-    //  changed == false;
-    //  for (each BB in F)
-        for (BasicBlock &BB : F) {
-    //      for(each I in BB)
-            for (Instruction &II : *BB) {
-    //          for(each OP in I)
-                for(Use &U : &II->operands()){
-                    Value *v = U.get();
-    //              for(each CONST in OP)  //checks if OP is CONST by casting to ConstantInt
-                    if(!(ConstantInt* constantInteger = dyn_cast<ConstantInt>(v)){
-                        break;
-                    }
-                    ConstantInt cInt = dyn_cast<ConstantInt>(v);
-
-                }
-    //          for(each OP in I)
-                I.getOperandList()           //Inherited user so should have this call
-
-    //              for(each CONST in OP) // TODO: Check whether an operand is a constant by casting it to a ConstantInt.
-    //                  add CONST to constantSet
-    //  end loops
-            }
-        }
-
-    //  for (each CONST in ConstantSet)
-    //      calculate value of constant in order it was added
-    //      For every type of computation: lhs.getZExtValue() op rhs.getZEXxtValue()
-    //      addition,
-    //      subtraction,
-    //      multiplica- tion,
-    //      arithmetic shift
-    //      changed == true
-    //      Insert in map
-    //
-    //  go through code and replace if find variable as key in map replace with value
-    //
-    }
-
-
-
-    //bool changed
-    //while(changed)                          // has users (keep looping till nothing is changed)
-    //  changed == false;
-    //  for (each BB in F)
-    //      for(each I in BB)
-    //          for(each OP in I)
-    //              for(each CONST in OP) // TODO: Check whether an operand is a constant by casting it to a ConstantInt.
-    //                  add CONST to constantSet
-    //  end loops
-
-
-    //  for (each CONST in ConstantSet)
-    //      calculate value of constant in order it was added
-    //      For every type of computation: lhs.getZExtValue() op rhs.getZEXxtValue()
-    //      addition,
-    //      subtraction,
-    //      multiplica- tion,
-    //      arithmetic shift
-    //      changed == true
-    //      Insert in map
-    //
-    //  go through code and replace if find variable as key in map replace with value
-    //
-
-/*
-        //for (each BB in F)
-        for (BasicBlock &BB : F) {
-        //  for(each I in BB)
-            for (Instruction &II : BB) {
-                Instruction *I = &II;
-        //      for(each OP in I)
-                if (CallInst *CI = dyn_cast<ConstantInt>(I)) {
-        //TODO add to set
-
-                }
-            }
-        }
-
-    //for (each CONST in ConstantSet)
-    //  calculate value of constant in order it was added
-    //  insert in map
-    //
-
-    //go through code and replace if find variable as key in map replace with value
-
-    return true;  // We did alter the IR
-}
-*/
 
 char CONSTPR::ID = 0;
 static RegisterPass<CONSTPR> X("coco-constprop", "Propagate constants over the code");
