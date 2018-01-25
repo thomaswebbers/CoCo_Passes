@@ -18,16 +18,15 @@ namespace {
 
 
 ConstantInt* foldConstant(BinaryOperator* I){
-    //! handle signed/unsigned ints.
-    uint64_t result;
+    int64_t result;
 
     Type* Ty = I->getType();
     ConstantInt* lop = dyn_cast<ConstantInt>(I->getOperand(0));
     ConstantInt* rop = dyn_cast<ConstantInt>(I->getOperand(1));
     unsigned Opcode = I->getOpcode();
 
-    uint64_t lval = lop->getZExtValue();
-    uint64_t rval = rop->getZExtValue();
+    int64_t lval = lop->getSExtValue();
+    int64_t rval = rop->getSExtValue();
 
     if (Opcode == Instruction::Add){
         result = lval + rval;
