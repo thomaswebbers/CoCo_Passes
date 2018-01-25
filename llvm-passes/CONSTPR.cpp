@@ -16,38 +16,6 @@ namespace {
     };
 }
 
-ConstantInt* foldConstant(BinaryOperator* I){
-    uint64_t result;
-
-    Type* Ty = I->getType();
-    ConstantInt* lop = dyn_cast<ConstantInt>(I->getOperand(0));
-    ConstantInt* rop = dyn_cast<ConstantInt>(I->getOperand(1));
-    unsigned Opcode = I->getOpcode();
-
-    uint64_t lval = lop->getZExtValue();
-    uint64_t rval = rop->getZExtValue();
-
-    if (Opcode == Instruction::Add){
-        result = lval + rval;
-    }else if (Opcode == Instruction::Sub){
-        result = lval - rval;
-    }else if (Opcode == Instruction::Mul){
-        result = lval * rval;
-    }else if(isShift(Opcode)->isArithmeticShift()){
-        result = lval << rval;
-    }
-
-    /*else if (Opcode == Instruction::Ashr){
-        result = lval << rval; //! not certain about this
-    }else if (Opcode == Instruction::Shl){
-        result = lval >> rval; //! >> ? <<
-    }*/
-    if(result){
-        LOG_LINE(result);
-        return cast<ConstantInt>(ConstantInt::get(Ty, result));
-    }
-    return nullptr;
-}
 
 ConstantInt* foldConstant(BinaryOperator* I){
     uint64_t result;
