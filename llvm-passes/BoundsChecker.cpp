@@ -1,12 +1,6 @@
 /*
- * Dummy module pass which can be used as example and starting point for
- * Assignment 3. This pass inserts calls to a helper function for every stack
- * allocation. The helper function prints the size of the stack allocation and
- * serves as an example how to create and insert helpers. The implementation of
- * the helper function can be found in runtime/dummy.c.
+ * Bounds checker which adds checks to prevent out of bounds read/writes on arrays
  */
-
- //!modify the above
 
 #define DEBUG_TYPE "BoundsChecker"
 #include "utils.h"
@@ -25,29 +19,92 @@ namespace {
     };
 }
 
-/*
- * Finds all allocations in a function and inserts a call that prints its size.
- */
- //!modify the above
+
 bool BoundsChecker::instrumentAllocations(Function &F) {
     bool Changed = false;
 
     return Changed;
 }
 
+///Gets offset compared to the original base pointer
+Value* getOffset(GetElementPtrInst *GEP){
+    //get input GEP offset and put into Value*
+    Type* offsetType = Type::getInt32Ty(M.getContext()); //! this does not feel right
+    Value* offset = ConstantInt::get(offsetType, 0);
+
+    //if GEP has an index, set offset to that index. otherwise remain 0
+    if(GEP->hasIndices()){
+        Value* index = GEP->getOperand(1);
+        Type* indexType = index->getType();
+        if(indexType->isIntegerTy(32)){
+            offset = index;
+        }
+    }
+
+    //Start recursive backtracking to get full offset from base pointer
+    Value* source = GEP->getOperand(0);
+
+    if(GetElementPtrInst *sGEP = dyn_cast<GetElementPtrInst>(source)){
+        Value* sourceOffset = getOffset(sGEP);
+        offset = BinaryOperator::Create(Instruction::Add, sourceOffset, offset); //! double check this
+    }
+
+    return offset;
+}
+
+///Return the allocated size of the original base pointer
+Value* getMaxSize(GetElementPtrInst *GEP){
+    Value* target = GEP;
+    Value* source = target->getOperand(0);
+
+    //1: trace back until you find a non-GEP Value*
+    while(isa<GetElementPtrInst>(source)){
+        target = source;
+        source = source->getOperand(0);
+    }
+
+    //2: check if it is a alloca, load, funcArg or constant...+
+    //3: determine max array size
+    Value* maxSize;
+
+    if(isa<Constant>(source)){
+        // return size of constant
+        return source; //! correct?
+    }
+    if(isa<LoadInst>(source)){
+        // return size of loadInst
+        return nullptr; //! implement later
+    }
+    if(isa<Argument>(source)){
+        // return size of Function Argument
+        char* name = source.getName();
+        if(strncmp(name, "argv", 5)){
+            return argc; //! figure this out. How to get argc with only name
+        }
+        return nullptr; //! implement later
+    }
+    if(isa<AllocaInst>(source)){
+        // return size of alloca instruction
+        maxSize = source.getOperand(1); //! correct operand?, need to check type?
+        return maxSize;
+    }
+    //! RAISE ERROR
+    return nullptr; //! will we ever reach this?
+}
+
+///Main run on module function
 bool BoundsChecker::runOnModule(Module &M) {
     bool Changed = false;
 
-    //make map of pointer + offset
-    //iterate through GEP instructions
-    //check if base pointer in GEP is inside map
-    //
-    //  if yes: get offset & add new offset from GEP
-    //  remove old pointer and add new pointer with new offset !because of SSA
-    //
-    //  if no: add new pointer to map with offset of GEP
-    //! this all needs to be added into a function boundschecker that returns a Value*?
-    //! no...maybe the entire module BoundsChecker (this file) needs to return a Value*
+    for (Instruction &II : instructions(F)) {
+        Instruction *I = &II;
+
+        if (GetElementPtrInst *GEP = dyn_cast<GetElementPtrInst>(I)) {
+            Value* offset = getOffset(GEP);
+            Value* maxSize = getMaxSize(GEP);
+
+        }
+    }
 
     return Changed;
 }
@@ -56,6 +113,5 @@ bool BoundsChecker::runOnModule(Module &M) {
 // to RegisterPass is the commandline switch to run this pass (e.g., opt
 // -coco-dummymodulepass, the second argument is a description shown in the help
 // text about this pass.
-//!modify the above
 char BoundsChecker::ID = 0;
-static RegisterPass<BoundsChecker> X("coco-boundscheck", "");
+static RegisterPass<BoundsChecker> X("coco-boundscheck", "add checks before GEP instructions to prevent out of bound reads/writes on arrays");
