@@ -5,6 +5,8 @@
 #define DEBUG_TYPE "BoundsChecker"
 #include "utils.h"
 
+Function *BoundsCheckFunc; //! watch out, global variable :(, ask why wont work otherwise
+
 namespace {
     class BoundsChecker : public ModulePass {
     public:
@@ -13,24 +15,19 @@ namespace {
         virtual bool runOnModule(Module &M) override;
 
     private:
-        Function *PrintAllocFunc;
-
-        bool instrumentAllocations(Function &F);
+        bool InsertBoundsCheck(GetElementPtrInst* GEP);
     };
-}
-
-
-bool BoundsChecker::instrumentAllocations(Function &F) {
-    bool Changed = false;
-
-    return Changed;
 }
 
 ///Gets offset compared to the original base pointer
 Value* getOffset(GetElementPtrInst *GEP){
+    BasicBlock* BB = GEP->getParent();
+    Function* parent = BB->getParent();
+    Module* M = parent->getParent();
+
     //get input GEP offset and put into Value*
-    Type* offsetType = Type::getInt32Ty(M.getContext()); //! this does not feel right
-    Value* offset = ConstantInt::get(offsetType, 0);
+    Type* offsetType;
+    Value* offset;
 
     //if GEP has an index, set offset to that index. otherwise remain 0
     if(GEP->hasIndices()){
@@ -38,7 +35,12 @@ Value* getOffset(GetElementPtrInst *GEP){
         Type* indexType = index->getType();
         if(indexType->isIntegerTy(32)){
             offset = index;
+        }else{
+        LOG_LINE("Wrong index Type in getOffset");
         }
+    }else{
+        offsetType = Type::getInt32Ty(M->getContext());
+        offset = ConstantInt::get(offsetType, 0);
     }
 
     //Start recursive backtracking to get full offset from base pointer
@@ -46,7 +48,9 @@ Value* getOffset(GetElementPtrInst *GEP){
 
     if(GetElementPtrInst *sGEP = dyn_cast<GetElementPtrInst>(source)){
         Value* sourceOffset = getOffset(sGEP);
-        offset = BinaryOperator::Create(Instruction::Add, sourceOffset, offset); //! double check this
+        const Twine &Name=Twine();
+        offset = BinaryOperator::Create(Instruction::Add, sourceOffset, offset, Name ,  GEP);//!
+        LOG_LINE("newOffset: " << *offset);
     }
 
     return offset;
@@ -54,13 +58,19 @@ Value* getOffset(GetElementPtrInst *GEP){
 
 ///Return the allocated size of the original base pointer
 Value* getMaxSize(GetElementPtrInst *GEP){
-    Value* target = GEP;
+    BasicBlock* BB = GEP->getParent();
+    Function* parent = BB->getParent();
+    Module* M = parent->getParent();
+
+
+    GetElementPtrInst* target = GEP;
+
     Value* source = target->getOperand(0);
 
     //1: trace back until you find a non-GEP Value*
     while(isa<GetElementPtrInst>(source)){
-        target = source;
-        source = source->getOperand(0);
+        target = cast<GetElementPtrInst>(source);
+        source = target->getOperand(0);
     }
 
     //2: check if it is a alloca, load, funcArg or constant...+
@@ -69,7 +79,16 @@ Value* getMaxSize(GetElementPtrInst *GEP){
 
     if(isa<Constant>(source)){
         // return size of constant
-        return source; //! correct?
+        //cast constant to array. Read about arraytype
+        //get size of array
+        if(dyn_cast<ConstantDataArray>(source)){
+            ConstantDataArray* sCDA = cast<ConstantDataArray>(source);
+            int constantSize = sCDA->getNumElements();
+            Type* sizeType = Type::getInt32Ty(M->getContext());
+            maxSize = ConstantInt::get(sizeType, constantSize);
+            return maxSize;
+        }
+        return nullptr;
     }
     if(isa<LoadInst>(source)){
         // return size of loadInst
@@ -77,35 +96,77 @@ Value* getMaxSize(GetElementPtrInst *GEP){
     }
     if(isa<Argument>(source)){
         // return size of Function Argument
-        char* name = source.getName();
-        if(strncmp(name, "argv", 5)){
-            return argc; //! figure this out. How to get argc with only name
+
+        // argv exception
+        StringRef name = source->getName();
+        const char* namePointer = name.data();
+        if(strncmp(namePointer, "argv", 5)){
+            StringRef parentName = parent->getName();
+            const char* parentNamePointer = parentName.data();
+            if(strncmp(parentNamePointer, "main", 5)){
+                return &cast<Value>(*parent->arg_begin());
+            }
         }
         return nullptr; //! implement later
     }
     if(isa<AllocaInst>(source)){
         // return size of alloca instruction
-        maxSize = source.getOperand(1); //! correct operand?, need to check type?
+        AllocaInst* sAlloca = dyn_cast<AllocaInst>(source);
+        maxSize = sAlloca->getArraySize();
         return maxSize;
     }
-    //! RAISE ERROR
-    return nullptr; //! will we ever reach this?
+    return nullptr;
+}
+
+bool InsertBoundsCheck(GetElementPtrInst* GEP){
+    bool Changed = false;
+
+    BasicBlock* BB = GEP->getParent();
+
+    IRBuilder<> IRbuild(BB);
+
+    LOG_LINE("GEP: " << *GEP);
+
+    Value* offset = getOffset(GEP);
+    Value* maxSize = getMaxSize(GEP);
+
+    if (maxSize == nullptr){
+        LOG_LINE("pointer found with unknown origin. Bad things have happened \n");
+        return Changed;
+    }
+    if (offset == nullptr){
+        LOG_LINE("offset is nullptr. Something even worse has happened \n");
+        return Changed;
+    }
+
+    LOG_LINE("offsetFinal: " << *offset);
+    LOG_LINE("maxSizeFound: " << *maxSize << "\n");
+
+    IRbuild.SetInsertPoint(GEP);
+    IRbuild.CreateCall(BoundsCheckFunc, {offset, maxSize});
+    Changed = true;
+
+    return Changed;
 }
 
 ///Main run on module function
 bool BoundsChecker::runOnModule(Module &M) {
     bool Changed = false;
 
-    for (Instruction &II : instructions(F)) {
-        Instruction *I = &II;
+    LLVMContext &C = M.getContext();
+    Type *VoidTy = Type::getVoidTy(C);
+    Type *Int32Ty = Type::getInt32Ty(C);
+    BoundsCheckFunc = cast<Function>(M.getOrInsertFunction("__coco_check_bounds", VoidTy, Int32Ty, Int32Ty));
 
-        if (GetElementPtrInst *GEP = dyn_cast<GetElementPtrInst>(I)) {
-            Value* offset = getOffset(GEP);
-            Value* maxSize = getMaxSize(GEP);
+    for (Function &F : M) {
+        for (Instruction &II : instructions(F)) {
+            Instruction *I = &II;
 
+            if (GetElementPtrInst *GEP = dyn_cast<GetElementPtrInst>(I)) {
+                Changed |= InsertBoundsCheck(GEP);
+            }
         }
     }
-
     return Changed;
 }
 
