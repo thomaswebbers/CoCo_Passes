@@ -5,7 +5,6 @@
 #define DEBUG_TYPE "BoundsChecker"
 #include "utils.h"
 
-Function *BoundsCheckFunc; //! watch out, global variable :(, ask why wont work otherwise
 
 namespace {
     class BoundsChecker : public ModulePass {
@@ -15,7 +14,10 @@ namespace {
         virtual bool runOnModule(Module &M) override;
 
     private:
+        Function *BoundsCheckFunc; //! watch out, global variable :(, ask why wont work otherwise
+
         bool InsertBoundsCheck(GetElementPtrInst* GEP);
+
     };
 }
 
@@ -118,7 +120,7 @@ Value* getMaxSize(GetElementPtrInst *GEP){
     return nullptr;
 }
 
-bool InsertBoundsCheck(GetElementPtrInst* GEP){
+bool BoundsChecker::InsertBoundsCheck(GetElementPtrInst* GEP){
     bool Changed = false;
 
     BasicBlock* BB = GEP->getParent();
@@ -143,22 +145,81 @@ bool InsertBoundsCheck(GetElementPtrInst* GEP){
     LOG_LINE("maxSizeFound: " << *maxSize << "\n");
 
     IRbuild.SetInsertPoint(GEP);
-    IRbuild.CreateCall(BoundsCheckFunc, {offset, maxSize});
+    IRbuild.CreateCall(BoundsCheckFunc, {offset, maxSize}); //!is dummy correct
     Changed = true;
 
     return Changed;
 }
 
+/*
+//clones the function, the clone has an added argument for ever pointer.
+//This argument contains the size of the array the pointer is pointing to.
+//It then replaces the old call functions with new call functions to the clone.
+void InsertArraysizeArgument(Function* F){
+    Module* M = F->getParent();
+    LLVMContext &C = M->getContext();
+    Type *Int32Ty = Type::getInt32Ty(C);
+
+    //Make a list of arguments which are pointers
+    std::set<Argument*> argSet;
+    ArrayRef<Type*> typeArray;
+    for (Function::arg_iterator AI = F->arg_begin(); AI != F->arg_end(); ++AI){
+        Argument* arg = AI;
+        Type* argType = arg->getType();
+        if (isa<PointerType>(argType)){
+            argSet.insert(arg);
+            typeArray.insert(Int32Ty); //! how do I insert into ArrayRef
+        }
+    }
+
+    //clone function with more arguments (Based upon amount of pointers)
+    SmallVectorImpl<Argument*> *newArgs;
+    Function* fClone = addParamsToFunction(F, typeArray, newArgs); //!
+
+    //assign names to new arguments based upon pointer source
+    //!????
+
+    //replace all calls with cloned function
+    ReplaceInstWithInst(F, fClone); //!
+    return;
+}
+*/
+
 ///Main run on module function
 bool BoundsChecker::runOnModule(Module &M) {
     bool Changed = false;
+
+    std::set<Function*> deadSet;
 
     LLVMContext &C = M.getContext();
     Type *VoidTy = Type::getVoidTy(C);
     Type *Int32Ty = Type::getInt32Ty(C);
     BoundsCheckFunc = cast<Function>(M.getOrInsertFunction("__coco_check_bounds", VoidTy, Int32Ty, Int32Ty));
 
+    /*
+    //Part 4: Replace functions with clones if they have a pointer in them.
     for (Function &F : M) {
+    //replace functions which have a argument which is a pointer
+        for (Function::arg_iterator AI = F.arg_begin(); AI != F.arg_end(); ++AI){
+            Argument* arg = AI;
+            Type* argType = arg->getType();
+            if (isa<PointerType>(argType)){
+                deadSet.insert(&F);
+                Changed |= true;
+                InsertArraysizeArgument(&F);
+                break;
+            }
+        }
+    }
+    */
+
+    for (Function &F : M) {
+        //Part 4: don go over dead functions
+        if(deadSet.count(&F) == 1){
+            continue;
+        }
+
+        //Go through all instructions and add a bounds check if they are a GEP
         for (Instruction &II : instructions(F)) {
             Instruction *I = &II;
 
@@ -166,6 +227,13 @@ bool BoundsChecker::runOnModule(Module &M) {
                 Changed |= InsertBoundsCheck(GEP);
             }
         }
+    }
+
+    //! add removal of functions which were cloned
+    std::set<Function*>::iterator it;
+    for (it = deadSet.begin(); it != deadSet.end(); ++it){
+        Function* dF = *it;
+        dF->eraseFromParent();
     }
     return Changed;
 }
