@@ -64,10 +64,11 @@ Value* getMaxSize(GetElementPtrInst *GEP){
     Function* parent = BB->getParent();
     Module* M = parent->getParent();
 
+    Value* source;
 
-    GetElementPtrInst* target = GEP;
+    GetElementPtrInst* target = cast<GetElementPtrInst>(GEP);
 
-    Value* source = target->getOperand(0);
+    source = target->getOperand(0);
 
     //1: trace back until you find a non-GEP Value*
     while(isa<GetElementPtrInst>(source)){
@@ -120,6 +121,8 @@ Value* getMaxSize(GetElementPtrInst *GEP){
     return nullptr;
 }
 
+
+
 bool BoundsChecker::InsertBoundsCheck(GetElementPtrInst* GEP){
     bool Changed = false;
 
@@ -162,28 +165,55 @@ void InsertArraysizeArgument(Function* F){
 
     //Make a list of arguments which are pointers
     std::set<Argument*> argSet;
-    ArrayRef<Type*> typeArray;
+    std::vector<Type*> typeArray;
+
     for (Function::arg_iterator AI = F->arg_begin(); AI != F->arg_end(); ++AI){
         Argument* arg = AI;
         Type* argType = arg->getType();
         if (isa<PointerType>(argType)){
             argSet.insert(arg);
-            typeArray.insert(Int32Ty); //! how do I insert into ArrayRef
+            typeArray.insert(Int32Ty);
         }
     }
 
     //clone function with more arguments (Based upon amount of pointers)
-    SmallVectorImpl<Argument*> *newArgs;
-    Function* fClone = addParamsToFunction(F, typeArray, newArgs); //!
+    SmallVectorImpl<Argument*> newArgs;
+    ArrayRef<Type*> typeRef = ArrayRef::ArrayRef<Type*>(typeArray);
+
+    Function* fClone = addParamsToFunction(F, typeRef, &newArgs);
 
     //assign names to new arguments based upon pointer source
-    //!????
+    llvm::SmallVectorImpl<Argument*>::iterator it;
+    for (it = newArgs.begin(); it != newArgs.end(); ++it){
+        //Get new Value
+        Argument* sizeArg = *it;
+
+        //Get pointer Value
+        std::set<Argument*>::iterator argIt = argSet.begin();
+        Argument* pointerArg = *argIt;
+        argSet.erase(argIt);
+
+        //Determine size of pointer base
+        Value* maxSize = getMaxSize(pointerArg);
+
+        //Determine name of new Value
+        StringRef pointerName = poinerArg->getName();
+        const char* nameData = name.data();
+
+        const char* sizeNameData = "__size_" << nameData;
+        StringRef sizeName = StringRef::StringRef(sizeNameData);
+
+        //Assign name and size to new Value
+        sizeArg.setName(sizeName);
+
+    }
 
     //replace all calls with cloned function
     ReplaceInstWithInst(F, fClone); //!
     return;
 }
 */
+
 
 ///Main run on module function
 bool BoundsChecker::runOnModule(Module &M) {
